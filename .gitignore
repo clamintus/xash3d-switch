@@ -320,3 +320,5 @@ RPMS/
 *.nacp
 *.nro
 *.bz2
+
+.vscode
