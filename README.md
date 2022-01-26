@@ -1,3 +1,8 @@
+## Known issues
+- Keyboard is disabled and cannot be used. I didn't manage to get it working.
+
+----------------------------
+
 # Xash3D FWGS Engine [![Build Status](https://travis-ci.org/FWGS/xash3d.svg)](https://travis-ci.org/FWGS/xash3d) [![Windows Build Status](https://ci.appveyor.com/api/projects/status/github/FWGS/xash3d?svg=true)](https://ci.appveyor.com/project/a1batross/xash3d)
 
 Latest version of the engine is available at:
