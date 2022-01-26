@@ -266,7 +266,7 @@ void Switch_GetScreenRes( AppletOperationMode mode, int *width, int *height ) {
 			*width = 1280;
 			*height = 720;
 			break;
-		case AppletOperationMode_Docked:
+		case AppletOperationMode_Console:
 			*width = 1920;
 			*height = 1080;
 			break;

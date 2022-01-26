@@ -12,7 +12,7 @@ convar_t *switch_console;
 
 typedef struct buttonmapping_s
 {
-	HidControllerKeys btn;
+	HidNpadButton btn;
 	int key;
 } buttonmapping_t;
 
@@ -24,25 +24,26 @@ typedef struct touchfinger_s
 
 static buttonmapping_t btn_map[15] =
 {
-	{ KEY_MINUS, '~' },
-	{ KEY_PLUS, K_ESCAPE },
-	{ KEY_DUP, K_UPARROW },
-	{ KEY_DRIGHT, K_MWHEELUP },
-	{ KEY_DDOWN, K_DOWNARROW },
-	{ KEY_DLEFT, K_MWHEELDOWN },
-	{ KEY_ZL, K_MOUSE2 },
-	{ KEY_ZR, K_MOUSE1 },
-	{ KEY_L, K_CTRL },
-	{ KEY_R, 'r' },
-	{ KEY_LSTICK, K_SHIFT },
-	{ KEY_A, K_ENTER },
-	{ KEY_B, K_SPACE },
-	{ KEY_X, 'f' },
-	{ KEY_Y, 'e' },
+	{ HidNpadButton_Minus, '~' },
+	{ HidNpadButton_Plus, K_ESCAPE },
+	{ HidNpadButton_Up, K_UPARROW },
+	{ HidNpadButton_Right, K_MWHEELUP },
+	{ HidNpadButton_Down, K_DOWNARROW },
+	{ HidNpadButton_Left, K_MWHEELDOWN },
+	{ HidNpadButton_ZL, K_MOUSE2 },
+	{ HidNpadButton_ZR, K_MOUSE1 },
+	{ HidNpadButton_L, K_CTRL },
+	{ HidNpadButton_R, 'r' },
+	{ HidNpadButton_StickL, K_SHIFT },
+	{ HidNpadButton_A, K_ENTER },
+	{ HidNpadButton_B, K_SPACE },
+	{ HidNpadButton_X, 'f' },
+	{ HidNpadButton_Y, 'e' },
 };
 
 
 
+static PadState pad;
 static uint64_t btn_state;
 static uint64_t old_btn_state;
 static touchfinger_t touch_finger[10];
@@ -75,6 +76,9 @@ static void RescaleAnalog( int *x, int *y, int dead )
 void Switch_IN_Init( void )
 {
 	switch_console = Cvar_Get( "switch_console", "0", FCVAR_ARCHIVE, "enable switch console override" );
+	padConfigureInput( 1, HidNpadStyleSet_NpadStandard );
+	padInitializeDefault( &pad );
+	hidInitializeTouchScreen();
 }
 
 qboolean Switch_IN_ConsoleEnabled( void )
@@ -84,34 +88,36 @@ qboolean Switch_IN_ConsoleEnabled( void )
 
 void Switch_IN_HandleTouch( void )
 {
-	u32 touch_count = hidTouchCount();
+	HidTouchScreenState touch_state = {0};
+	hidGetTouchScreenStates( &touch_state, 1 );
+	s32 touch_count = touch_state.count;
 
 	const size_t finger_count = sizeof(touch_finger) / sizeof(touch_finger[1]);
 
 	qboolean touched_down_now[finger_count];
 
 	if( touch_count > 0 ) {
-		touchPosition touch;
+		HidTouchState *touch;
 
 		for( int i = 0; i < touch_count; i ++ ) {
-			hidTouchRead(&touch, i);
-			if(touch.id >= finger_count)
+			touch = &touch_state.touches[i];
+			if(touch->finger_id >= finger_count)
 				continue;
 
-			touchfinger_t *finger = &touch_finger[touch.id];
+			touchfinger_t *finger = &touch_finger[touch->finger_id];
 
-			finger->x = touch.px / scr_width->value;
-			finger->y = touch.py / scr_height->value;
-			finger->dx = touch.dx / scr_width->value;
-			finger->dy = touch.dy / scr_height->value;
+			finger->x = touch->x / scr_width->value;
+			finger->y = touch->y / scr_height->value;
+			finger->dx = touch->diameter_x / scr_width->value;
+			finger->dy = touch->diameter_y / scr_height->value;
 
-			touched_down_now[touch.id] = true;
+			touched_down_now[touch->finger_id] = true;
 
-			if (!touch_finger[touch.id].down) {
-				IN_TouchEvent( event_down, touch.id, finger->x, finger->y, finger->dx, finger->dy );
+			if (!touch_finger[touch->finger_id].down) {
+				IN_TouchEvent( event_down, touch->finger_id, finger->x, finger->y, finger->dx, finger->dy );
 				finger->down = true;
 			} else {
-				IN_TouchEvent( event_motion, touch.id, finger->x, finger->y, finger->dx, finger->dy );
+				IN_TouchEvent( event_motion, touch->finger_id, finger->x, finger->y, finger->dx, finger->dy );
 			}
 		}
 
@@ -135,9 +141,9 @@ void Switch_IN_HandleTouch( void )
 
 void Switch_IN_Frame( void )
 {
-    hidScanInput();
+    padUpdate( &pad );
 
-    btn_state = hidKeysHeld(CONTROLLER_P1_AUTO);
+    btn_state = padGetButtons( &pad );
 
     for ( int i = 0; i < 15; ++i ) {
         if ((btn_state & btn_map[i].btn) != (old_btn_state & btn_map[i].btn)) {
@@ -147,24 +153,24 @@ void Switch_IN_Frame( void )
 
     old_btn_state = btn_state;
 
-	JoystickPosition pos_left, pos_right;
+	HidAnalogStickState pos_left, pos_right;
 
 	//Read the joysticks' position
-	hidJoystickRead(&pos_left, CONTROLLER_P1_AUTO, JOYSTICK_LEFT);
-	hidJoystickRead(&pos_right, CONTROLLER_P1_AUTO, JOYSTICK_RIGHT);
+	pos_left = padGetStickPos( &pad, 0 );
+	pos_right = padGetStickPos( &pad, 1 );
 
-	if (abs( pos_left.dx ) < SWITCH_JOYSTICK_DEADZONE)
-		pos_left.dx = 0;
-	if (abs( pos_left.dy ) < SWITCH_JOYSTICK_DEADZONE)
-		pos_left.dy = 0;
+	if (abs( pos_left.x ) < SWITCH_JOYSTICK_DEADZONE)
+		pos_left.x = 0;
+	if (abs( pos_left.y ) < SWITCH_JOYSTICK_DEADZONE)
+		pos_left.y = 0;
 
-	Joy_AxisMotionEvent( 0, 0, pos_left.dx );
-	Joy_AxisMotionEvent( 0, 1, -pos_left.dy );
+	Joy_AxisMotionEvent( 0, 0, pos_left.x );
+	Joy_AxisMotionEvent( 0, 1, -pos_left.y );
 
-	RescaleAnalog(&pos_right.dx, &pos_right.dy, SWITCH_JOYSTICK_DEADZONE);
+	RescaleAnalog(&pos_right.x, &pos_right.y, SWITCH_JOYSTICK_DEADZONE);
 
-	Joy_AxisMotionEvent( 0, 2, -pos_right.dx );
-	Joy_AxisMotionEvent( 0, 3, pos_right.dy );
+	Joy_AxisMotionEvent( 0, 2, -pos_right.x );
+	Joy_AxisMotionEvent( 0, 3, pos_right.y );
 
 	Switch_IN_HandleTouch();
 }
